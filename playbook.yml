@@ -10,7 +10,7 @@
       become: true
       apt:
         update_cache: true
-        cache_valid_time: 3600000
+        cache_valid_time: 36000
 
     - name: Upgrade installed packages
       become: true
@@ -46,6 +46,7 @@
         state: latest
 
     - name: Install PHP packages
+      become: true
       apt:
         name: "{{ item }}"
         state: latest
@@ -53,7 +54,8 @@
         "php7.1-curl",
         "php7.1-fpm",
         "php7.1-intl",
-        "php7.1-mysql" ]
+        "php7.1-mysql",
+        "php7.1-xml" ]
 
     - name: Set date.timezone for CLI
       become: true
@@ -84,3 +86,30 @@
         repo: https://github.com/symfony/symfony-standard.git
         dest: "{{ symfony_root_dir }}"
         force: true
+
+    - name: Install low-level utilities
+      become: true
+      apt:
+        name: "{{ item }}"
+        state: latest
+      loop: [
+        "zip",
+        "unzip" ]
+
+    - name: Download Composer
+      script: scripts/install_composer.sh
+
+    - name: Move Composer globally
+      become: true
+      command: mv composer.phar /usr/local/bin/composer
+
+    - name: Set permissions on Composer
+      become: true
+      file:
+        path: /usr/local/bin/composer
+        mode: "755"
+
+    - name: Install Composer's  dependencies
+      composer:
+        working_dir: "{{ symfony_root_dir }}"
+        no_dev: false
