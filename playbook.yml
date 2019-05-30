@@ -1,13 +1,15 @@
 ---
 - hosts: local
-  # variable defined to be used later
+  # variable defined to be used later on this script
   vars:
     server_name: mootube.l
     symfony_root_dir: "/var/www/project"
     symfony_web_dir: "{{ symfony_root_dir }}/web"
     symfony_var_dir: "{{ symfony_root_dir }}/var"
+    symfony_console_path: "{{ symfony_root_dir }}/bin/console"
 
   tasks:
+    # this will check if the host is accessible
     - ping: ~
 
     - name: Update APT package manager repositories cache
@@ -89,10 +91,20 @@
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         recurse: true
+      tags: 
+        - deploy
 
     - name: Checkout Git repository
       git:
         repo: https://github.com/symfony/symfony-standard.git
+        dest: "{{ symfony_root_dir }}"
+        force: true
+      tags:
+        - deploy
+
+    - name: Git clone MUTUBE
+      git:
+        repo: git@github.com:knpuniversity/ansible.git
         dest: "{{ symfony_root_dir }}"
         force: true
 
@@ -107,21 +119,29 @@
 
     - name: Download Composer
       script: scripts/install_composer.sh
+      tags:
+        - deploy
 
     - name: Move Composer globally
       become: true
       command: mv composer.phar /usr/local/bin/composer
+      tags:
+        - deploy
 
     - name: Set permissions on Composer
       become: true
       file:
         path: /usr/local/bin/composer
         mode: "755"
+      tags:
+        - deploy
 
     - name: Install Composer's  dependencies
       composer:
         working_dir: "{{ symfony_root_dir }}"
         no_dev: false
+      tags:
+        - deploy
 
     - name: Add Symfony config template to the Nginx available sites
       become: true
@@ -150,6 +170,29 @@
         state: directory
         mode: "777"
         recurse: true
+      changed_when: false
+      tags: 
+        - permissions
+        - deploy
+
+    # Symfony console commands
+    - name: Create DB if not exists
+      command: '{{ symfony_console_path }} doctrine:database:create --if-not-exists'
+      tags:
+        - deploy
+      register: db_create_result
+      changed_when: "not db_create_result.stdout|search('already exists. Skipped')"
+
+    - debug:
+        var: db_create_result
+      tags:
+        - deploy
+
+#- name: Execute migrations
+#command: '{{ symfony_console_path }} doctrine:migrations:migrate '
+
+#- name: Load data fixtures
+#command: '{{ symfony_console_path }} hatelook_alice:doctrine:fixtures:load --no-interaction'
 
   handlers:
     - name: Restart Nginx
